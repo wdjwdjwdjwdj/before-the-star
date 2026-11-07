@@ -9,6 +9,7 @@
 
 #loop-hint{position:absolute;left:50%;bottom:16%;transform:translateX(-50%);z-index:40;pointer-events:none;max-width:34rem;text-align:center;color:#f6e2b8;font-size:20px;letter-spacing:.12em;line-height:1.6;text-shadow:0 2px 18px #000;background:#0c1c28d0;border:1px solid #f3cf9866;padding:14px 22px}
 #rewind-tag{position:absolute;top:18%;left:50%;transform:translateX(-50%);z-index:28;pointer-events:none;letter-spacing:.48em;font-size:13px;color:#f3cf98;text-shadow:0 0 16px #000}
+#hypothesis-now{position:absolute;top:158px;left:28px;margin:0;max-width:28rem;pointer-events:none;color:#f3cf98;font-size:13px;letter-spacing:.04em;text-shadow:0 2px 10px #000}
 #pulse-overlay.rewind-fx{background:repeating-linear-gradient(to bottom,transparent 0 5px,rgba(243,207,152,.22) 5px 6px)}
 #pulse-overlay{pointer-events:none}
 .quiet-end h1{font-size:64px;letter-spacing:.2em}
