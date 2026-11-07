@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "boards": [
+    {
+      "id": "b7a6d231-b564-4ed1-a351-d583ee3b9e0b",
+      "name": "恒星升起前 · 设计与验收"
+    }
+  ],
+  "documents": [{ "id": "main-design", "title": "恒星升起前 · 主设计文档" }],
+  "mainDocumentId": "main-design"
+}
