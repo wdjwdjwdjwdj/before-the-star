@@ -17,8 +17,9 @@ export class UI {
       <div id="reset-hold"><i></i><span>按住 R · 放弃本轮</span></div>
       <div class="bottom-hint">${key('W A S D')} 移动 <span> / </span> ${key('E')} 交互 <span> / </span> ${key('Esc')} 暂停</div>
       <div id="touch-controls"><div class="dpad"><button data-move="up" aria-label="向前">▲</button><button data-move="left" aria-label="向左">◀</button><button data-move="down" aria-label="向后">▼</button><button data-move="right" aria-label="向右">▶</button></div><button class="touch-e" data-action="interact">E</button></div>
-    </div><div id="cinematic-window" hidden><div class="window-rim"></div><span>逃生舱 / 舷窗视野</span><p>恒星脉冲再次扫过曙光站。</p><button class="primary" data-action="settle" hidden>查看结算 ↗</button></div><div id="overlay"></div><div id="pulse-overlay" hidden></div><div id="fatal" hidden></div>`;
-    this.el={};for(const id of ['hud','overlay','room-name','power-status','cycle-num','remaining','clock-arc','broadcast','discovery-toast','context','target-name','interact','device-status','new-count','reset-hold','launch-status','pulse-overlay','cost-preview','vital-mode','vital-heat','vital-cold','vital-switch'])this.el[id]=document.getElementById(id);
+    </div><div id="rewind-tag" hidden>回溯开始</div><div id="loop-hint" hidden></div><div id="cinematic-window" hidden><div class="window-rim"></div><span>逃生舱 / 舷窗视野</span><p>恒星脉冲再次扫过曙光站。</p><button class="primary" data-action="settle" hidden>查看结算 ↗</button></div><div id="overlay"></div><div id="pulse-overlay" hidden></div><div id="fatal" hidden></div>`;
+    this.hintUntil=0;
+    this.el={};for(const id of ['hud','overlay','room-name','power-status','cycle-num','remaining','clock-arc','broadcast','discovery-toast','context','target-name','interact','device-status','new-count','reset-hold','launch-status','pulse-overlay','cost-preview','vital-mode','vital-heat','vital-cold','vital-switch','loop-hint','rewind-tag'])this.el[id]=document.getElementById(id);
     document.querySelector('#app').addEventListener('click',e=>{const b=e.target.closest('[data-action]');if(b){e.preventDefault();e.stopPropagation();this.action(b.dataset.action);}});
     document.querySelector('#app').addEventListener('input',e=>{if(e.target.id==='volume'){game.memory.settings.volume=Number(e.target.value)/100;document.getElementById('volume-value').textContent=e.target.value+'%';save(game.memory);}});
     document.querySelector('#app').addEventListener('change',e=>{if(['shake','flash'].includes(e.target.id)){game.memory.settings[e.target.id]=e.target.checked;save(game.memory);}});
@@ -72,7 +73,7 @@ export class UI {
   shell(content,cls='') {return `<div class="scrim ${cls}"><section class="panel" role="dialog" aria-modal="true">${content}</section></div>`;}
   renderScreen() {
     const g=this.game,m=g.memory;let html='';
-    if(this.screen==='title')html=`<div class="title-screen"><div class="title-copy"><span class="eyebrow">SCHEME C · 假设环 · 热痕 / NOT V2</span><h1>恒星<br>升起前<span>BEFORE THE STAR · 丙+①②</span></h1><p>同一座空间站。相同的四十二秒。<br>温控每环只能拨一次。靠近设备，E 之前先看一句代价。</p><div class="title-actions"><button class="primary" data-action="${m.cycles?'continue':'new'}">${m.cycles?'继续值守':'开始值守'}<span>↗</span></button>${m.cycles?'<button data-action="new">新游戏 / 清空认知</button>':''}<div><button data-action="help">操作说明</button><button data-action="settings">设置</button></div></div><small>低多边形科幻解谜 · 主题「环」 · 无战斗</small></div><div class="title-stamp"><b>曙光站</b><span>ORBITAL RESEARCH / 07</span><i>世界会回来。你呢？</i></div></div>`;
+    if(this.screen==='title')html=`<div class="title-screen"><div class="title-copy"><span class="eyebrow">SILENT LOOP · 静默环 / 无结算</span><h1>恒星<br>升起前<span>BEFORE THE STAR · 丙+①②</span></h1><p>四十二秒的冲击不会弹出失败。<br>逃出舱体，也还会回到原点。</p><div class="title-actions"><button class="primary" data-action="${m.cycles?'continue':'new'}">${m.cycles?'继续值守':'开始值守'}<span>↗</span></button>${m.cycles?'<button data-action="new">新游戏 / 清空认知</button>':''}<div><button data-action="help">操作说明</button><button data-action="settings">设置</button></div></div><small>低多边形科幻解谜 · 主题「环」 · 无战斗</small></div><div class="title-stamp"><b>曙光站</b><span>ORBITAL RESEARCH / 07</span><i>世界会回来。你呢？</i></div></div>`;
     if(this.screen==='confirm')html=this.shell(`<span class="eyebrow">NEW SHIFT</span><h2>重新开始值守？</h2><p>这将清空已发现的认知、日志与挑战统计。音量和辅助设置会保留。</p><div class="actions"><button data-action="cancel-new">返回</button><button class="primary" data-action="confirm-new">确认新游戏</button></div>`);
     if(this.screen==='pause')html=this.shell(`<span class="eyebrow">TIME SUSPENDED / 时间已暂停</span><h2>这一刻，属于你。</h2><p>第 ${m.cycles} 环 · 本轮剩余 ${Math.max(0,RULES.cycle-g.s.elapsed).toFixed(1)} 秒</p><div class="menu-list"><button class="primary" data-action="resume">返回空间站 ${key('Esc')}</button><button data-action="records">认知记录与地图</button><button data-action="reset">主动重置本轮</button><button data-action="settings">设置</button><button data-action="help">操作说明</button><button data-action="title">保存认知并返回标题</button></div>`);
     if(this.screen==='help')html=this.shell(`<span class="eyebrow">FIELD MANUAL / 操作说明</span><h2>观察。尝试。记住。</h2><div class="manual"><p>${key('WASD')} / ${key('↑ ↓ ← →')} 自由移动</p><p>${key('E')} 与附近高亮设备交互。靠近断闸、隔离、启动、温控时，会先看到一句代价。</p><p>${key('Tab')} 本环假设、已解事实、0–${RULES.cycle}s 简轴</p><p>${key('Esc')} 暂停 / 返回</p><p>${key('R')} 按住 0.8 秒重置本轮</p><p>半就绪出现时：${key('1')} 标准开局，${key('2')} 电池 50% 未隔离</p></div><p>点击开始值守后，四十二秒计时启动。打开菜单、假设板和日志会暂停。每轮开关与电量归零；余热、假设和热痕会留下。</p><button class="primary" data-action="back">明白了</button>`);
@@ -80,7 +81,7 @@ export class UI {
     if(this.screen==='brief')html=this.shell(`<span class="eyebrow">HALF READY / 时间未开始</span><h2>这一环可以半就绪。</h2><p>你已经看懂够多了。半就绪仍从苏醒舱出发：电池带着 50% 电量，但没有隔离，主网是通的，温控仍是能源优先。标准开局则从空电池开始。</p><div class="actions"><button data-action="ready-standard">标准开局 ${key('1')}</button><button class="primary" data-action="ready-half">半就绪 ${key('2')}</button></div>`);
     if(this.screen==='records')html=this.shell(`<div class="panel-head"><div><span class="eyebrow">OPEN QUESTION / 时间已暂停</span><h2>本环假设</h2></div><button data-action="resume" aria-label="关闭认知记录">${key('Tab')} 关闭</button></div><div class="records-layout"><div><div class="hypothesis">${this.hypothesis()}</div>${this.axis()}${m.lastTrace?`<p class="trace">${escapeHtml(m.lastTrace)}</p>`:''}<div class="station-map">${this.map()}</div><small>蓝点：你的位置 · 橙色：安全门 · 温控在维护室南侧</small><p class="archive-stat">第 ${m.cycles} 环 · 累计 ${formatTime(m.total)} · ${g.s.cooling==='energy'?'能源优先':'休眠优先'}</p><div class="hint-box"><span class="eyebrow">按需提示</span><p>${this.hintText||'需要另一个观察角度时，再向这里提问。'}</p><button data-action="hint">${this.hintText?'再给一点提示':'请求一点提示'}</button></div></div><div class="archive-list">${this.solvedFacts()}${m.discoveries.length?m.discoveries.map(id=>`<article><span>◉</span><div><h3>${KNOWLEDGE[id].title}</h3><p>${KNOWLEDGE[id].text}</p></div></article>`).join(''):'<p class="empty">还没有留下已解事实。<br>先去验证这一环的假设。</p>'}<h3 class="logs-heading">已读日志 / ${m.logs.length}</h3>${m.logs.map(id=>`<button class="log-link" data-action="log:${id}">${LOGS[id].title} ↗</button>`).join('')}</div></div>`, 'wide');
     if(this.screen==='log'){const log=LOGS[this.currentLog];html=this.shell(`<span class="eyebrow">LOCAL DOCUMENT / 时间已暂停</span><h2>${log.title}</h2><p class="log-text">${log.text.replaceAll('\n','<br>')}</p><button class="primary" data-action="resume">收起记录 ${key('E / Esc')}</button>`);}
-    if(this.screen==='won')html=`<div class="ending-screen"><span class="eyebrow">OUTSIDE THE CYCLE</span><h1>空间站回到了 ${RULES.cycle} 秒前。<br><em>休眠乘员已安全脱离。</em></h1><p>《恒星升起前》 · 人类安全撤离完成</p><div class="end-stats"><div><b>${m.cycles}</b><span>经历的循环</span></div><div><b>${m.discoveries.length}<small> / ${Object.keys(KNOWLEDGE).length}</small></b><span>留下的发现</span></div><div><b>${formatTime(m.total)}</b><span>累计值守时间</span></div></div><div class="actions"><button class="primary" data-action="continue">再值守一环 · 带着认知</button><button data-action="replay">清空认知重来</button><button data-action="title">返回标题</button></div></div>`;
+    if(this.screen==='trueend')html=`<div class="ending-screen quiet-end"><span class="eyebrow">THE LOOP SHIFTS</span><h1>环已偏开。</h1><p>假设已经落地。这一次，脱离没有被环拉回去。</p><div class="actions"><button data-action="title">离开</button></div></div>`;
     this.el.overlay.innerHTML=html;
   }
   hypothesis() {
@@ -114,17 +115,17 @@ export class UI {
     if(e.type==='brief'){this.screen='brief';this.clearInput();this.renderScreen();}
     if(e.type==='ready'){this.screen=null;this.playMode='play';this.clearInput();this.el.overlay.innerHTML='';}
     if(e.type==='log'){this.currentLog=e.detail;this.open('log');}
-    if(e.type==='reset'){this.clearInput();this.screen=null;this.el.overlay.innerHTML='';}
+    if(e.type==='loop-hint'){this.el['loop-hint'].textContent=e.detail;this.hintUntil=performance.now()+5600;}
+    if(e.type==='trueend'){this.screen='trueend';this.clearInput();this.renderScreen();}
+    if(e.type==='reset'){if(this.screen==='log'){this.screen=null;this.el.overlay.innerHTML='';}}
   }
   update(target, resetHeld) {
     const s=this.game.s,m=this.game.memory;
-    if(s.mode==='won'&&this.screen!=='won'){this.screen='won';this.clearInput();this.renderScreen();}
-    const inGame=!['title','won','ending'].includes(s.mode);
+    if(s.mode==='trueend'&&this.screen!=='trueend'){this.screen='trueend';this.clearInput();this.renderScreen();}
+    const inGame=!['title','trueend'].includes(s.mode)&&this.screen!=='trueend';
     this.el.hud.hidden=!inGame;
     const windowView=document.getElementById('cinematic-window');
-    windowView.hidden=!(s.mode==='ending'&&s.ending>=2.7);
-    windowView.querySelector('button').hidden=s.ending<5;
-    windowView.querySelector('p').innerHTML=s.ending>=5?`空间站回到了 ${RULES.cycle} 秒前。<br>休眠乘员已离开锚点。`:'恒星脉冲再次扫过曙光站。';
+    windowView.hidden=true;
     this.el['room-name'].textContent=roomAt(s.player).name;
     this.el['power-status'].textContent=s.power?'● 主网在线':s.isolated?'● 主网离线 / 备用独立':'○ 主网离线';
     this.el['power-status'].className=s.power?'online':s.isolated?'backup':'offline';
@@ -153,10 +154,16 @@ export class UI {
     } else this.el['cost-preview'].hidden=true;
     const launch=this.el['launch-status'];launch.hidden=s.mode!=='launch';launch.querySelector('i').style.width=`${s.launch/RULES.launch*100}%`;
     this.el['reset-hold'].classList.toggle('show',resetHeld>0);this.el['reset-hold'].querySelector('i').style.width=Math.min(100,resetHeld/.8*100)+'%';
+    const rewinding=s.mode==='rewind';
+    this.el['rewind-tag'].hidden=!rewinding;
     const pulse=this.el['pulse-overlay'];
-    const scarFlash=s.scarPulse>0&&m.settings.flash&&s.mode!=='reset';
-    pulse.hidden=s.mode!=='reset'&&!scarFlash;
-    if(s.mode==='reset'){pulse.className=m.settings.flash?'strong':'';pulse.innerHTML='<div><span>辐射脉冲 / CYCLE REWIND</span><b>控制重启 · 热账还在</b><button data-action="skip">E · 跳过</button></div>';}
-    else if(scarFlash){pulse.className='strong';pulse.innerHTML='<div><span>余热 / RESIDUAL</span><b>热量不回到脉冲前</b></div>';}
+    const scarFlash=s.scarPulse>0&&m.settings.flash&&!rewinding;
+    pulse.hidden=!scarFlash&&!rewinding;
+    pulse.className=rewinding?'rewind-fx':scarFlash?'strong':'';
+    if(scarFlash)pulse.innerHTML='<div><span>余热 / RESIDUAL</span><b>热量不回到脉冲前</b></div>';
+    else pulse.innerHTML='';
+    const hint=this.el['loop-hint'];
+    hint.hidden=rewinding||!(performance.now()<this.hintUntil&&s.loopHint);
+    if(!hint.hidden)hint.textContent=s.loopHint;
   }
 }

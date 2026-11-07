@@ -270,18 +270,25 @@ export class World {
     for(let i=0;i<2;i++){const g=this.gatePanels[i];const goal=(i===0?-1:1)*(power?.75:2.15);g.position.z=THREE.MathUtils.damp(g.position.z,goal,14,dt);}
     const pp=power||(s.isolated&&s.charge>=1);
     this.podScreen.material.emissiveIntensity=pp?1.4:0;this.podScreen.material.color.setHex(pp?0x6cf3ca:0x162c35);this.podIndicator.intensity=pp?5:0;
-    this.player.visible=!['launch','ending','won'].includes(s.mode);
-    this.player.position.set(s.player.x,s.moving?Math.sin(t*18)*.035:0,s.player.z);this.player.rotation.y=s.facing;
+    const rewinding=s.mode==='rewind';
+    const slice=rewinding?Math.floor(s.rewindTime*16):0;
+    this.player.visible=!['launch','trueend'].includes(s.mode)&&!(rewinding&&s.rewindTime>.58);
+    const jx=rewinding?((slice%2)?.42:-.28)*(1-s.rewindTime/.72):0;
+    const jz=rewinding?((slice%3)-1)*.22*(1-s.rewindTime/.72):0;
+    this.player.position.set(s.player.x+jx,s.moving?Math.sin(t*18)*.035:0,s.player.z+jz);this.player.rotation.y=s.facing+(rewinding?slice*.4:0);
+    this.station.position.x=rewinding?(slice%3-1)*.12:0;
+    this.station.position.z=rewinding?((slice+1)%3-1)*.08:0;
     for(let i=0;i<2;i++){const v=s.moving?Math.sin(t*13+i*Math.PI)*.5:0;this.legs[i].rotation.x=v;this.arms[i].rotation.x=-v*.8;}
     this.marker.visible=!!target&&s.mode==='play';if(target){this.marker.position.set(target.x,.09,target.z);const scale=1+Math.sin(t*4)*.05;this.marker.scale.setScalar(scale);}
-    const flying=['ending','won'].includes(s.mode);this.engine.visible=flying||s.mode==='launch';
+    const flying=s.mode==='trueend';this.engine.visible=flying||s.mode==='launch'||s.mode==='rewind';
     const e=flying?Math.min(7,s.ending):0;this.pod.visible=!flying||e<2.7;this.pod.position.set(9.2+e*1.9,e*1.25,-3-e*1.75);this.pod.rotation.z=flying?-Math.min(.23,e*.08):0;
     if(s.mode==='launch'){this.pod.position.y=s.launch*.15;this.engine.scale.y=.3+s.launch*.35;}
     else this.engine.scale.y=1+(Math.sin(t*40)*.08);
-    const pulse=s.mode==='reset'?s.resetTime:flying?Math.max(0,s.ending-3.4):0;
-    this.pulse.material.opacity=pulse>0?Math.max(0,1-pulse/2)*.65:0;this.pulse.scale.setScalar(pulse*30);
+    const pulse=rewinding?Math.floor(s.rewindTime*8)/8:(s.waveFlash>0?.55-s.waveFlash:flying?Math.max(0,s.ending-1.2):0);
+    this.pulse.material.opacity=pulse>0?Math.min(.75,pulse+ (rewinding?.25:0)):0;this.pulse.scale.setScalar(Math.max(pulse,0)*34);
     const narrow=this.width/this.height<.85;const cx=narrow?THREE.MathUtils.clamp(s.player.x,-7,7):0,cz=narrow?THREE.MathUtils.clamp(s.player.z,-2,2):0;
-    let shake=memory.settings.shake&&(s.mode==='reset'||s.mode==='launch'||(s.scarPulse>0))?Math.sin(t*64)*(s.scarPulse>0?.05:.035):0;
+    let shake=0;
+    if(memory.settings.shake)shake=rewinding?(slice%2?.16:-.11):(s.mode==='launch'||s.scarPulse>0||s.waveFlash>0)?Math.sin(t*64)*.04:0;
     this.camera.zoom=flying?1-Math.max(0,e-2.5)*.055:1;this.camera.updateProjectionMatrix();
     this.camera.position.set(cx+shake,28,23+cz);this.camera.lookAt(cx,0,cz);
     this.renderer.render(this.scene,this.camera);

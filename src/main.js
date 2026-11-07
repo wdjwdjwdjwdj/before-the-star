@@ -22,8 +22,7 @@ window.addEventListener('keydown',e=>{
   if(['tab',' ','arrowup','arrowdown','arrowleft','arrowright','escape'].includes(k))e.preventDefault();
   if(e.repeat)return;
   if(game.s.mode==='brief'){if(k==='1'||k==='n')game.chooseReady(false);if(k==='2'||k==='h')game.chooseReady(true);return;}
-  if(game.s.mode==='reset'){if(['e',' ','escape'].includes(k))game.skipReset();return;}
-  if(game.s.mode==='ending'){if(['e',' '].includes(k))game.finishEnding();return;}
+  if(game.s.mode==='trueend'){if(['e',' ','escape'].includes(k))ui.action('title');return;}
   if(k==='escape'){
     if(ui.screen==='pause')ui.close();
     else if(['records','log'].includes(ui.screen))ui.close();
@@ -65,7 +64,7 @@ function advanceClock(now){
 function frame(now){
   const dt=advanceClock(performance.now());
   const target=game.nearest();world.update(game.s,target,game.memory,totalVisual,Math.min(dt,.1));ui.update(target,input.resetHeld);
-  audio.update(game.s.power,!document.hidden&&['play','launch','reset','ending'].includes(game.s.mode),game.memory.settings.volume);
+  audio.update(game.s.power,!document.hidden&&['play','launch','rewind','trueend'].includes(game.s.mode),game.memory.settings.volume);
   if(totalVisual-lastSave>3){save(game.memory);lastSave=totalVisual;}
   requestAnimationFrame(frame);
 }

@@ -15,13 +15,26 @@ test('rules keep the V2 clock and the scheme-C thermal numbers',()=>{
   assert.equal(FE.baseHeat,2);assert.equal(FE.safeHeat,4);assert.equal(FE.max,5);
   assert.equal(carryResidual(5),4);assert.equal(carryResidual(4),3);assert.equal(carryResidual(2),2);
 });
-test('idle: full 42 second pulse, same spawn and physical state; memory preserved',()=>{
-  const {g}=setup();g.discover('gate');advance(g,42.1);assert.equal(g.s.mode,'reset');advance(g,1.3);
-  assert.equal(g.memory.cycles,2);assert.deepEqual(g.s.player,SPAWN);assert.equal(g.s.main,true);assert.equal(g.s.charge,0);assert.equal(g.s.isolated,false);assert.ok(g.memory.discoveries.includes('gate'));assert.ok(g.memory.discoveries.includes('loop'));
+test('idle: the 42s shock starts rewind immediately, then lands on spawn with no modal',()=>{
+  const {g}=setup();g.discover('gate');advance(g,42.02);assert.equal(g.s.mode,'rewind');assert.equal(g.s.loopHint,'');
+  advance(g,.8);
+  assert.notEqual(g.s.mode,'rewind');assert.notEqual(g.s.mode,'won');assert.notEqual(g.s.mode,'trueend');
+  assert.equal(g.memory.cycles,2);assert.deepEqual(g.s.player,SPAWN);assert.equal(g.s.main,true);assert.equal(g.s.charge,0);assert.equal(g.s.isolated,false);assert.ok(g.memory.discoveries.includes('gate'));assert.ok(g.memory.discoveries.includes('loop'));assert.equal(g.s.loopHint,'');
 });
 test('main off releases gate but pod refuses powerless launch',()=>{const {g}=setup();at(g,'breaker');g.interact();assert.equal(g.s.power,false);at(g,'terminal');g.interact();assert.equal(g.s.mode,'play');assert.equal(g.podPower,false);assert.ok(g.memory.discoveries.includes('pod'));});
 test('full but NOT isolated battery drains to common grid; no backup launch',()=>{const {g}=setup();charge(g);at(g,'breaker');g.interact();assert.equal(g.podPower,false);assert.ok(g.memory.discoveries.includes('drain'));at(g,'terminal');g.interact();assert.equal(g.s.mode,'play');advance(g,1.6);assert.equal(g.s.charge,0);});
-test('isolated full battery survives shutdown and wins without loop gating',()=>{const {g}=setup();charge(g);g.interact();assert.equal(g.s.isolated,true);assert.equal(g.s.cold,1);at(g,'breaker');g.interact();assert.equal(g.podPower,true);at(g,'terminal');g.interact();assert.equal(g.s.mode,'launch');advance(g,2.05);assert.equal(g.s.mode,'ending');advance(g,45);assert.equal(g.s.mode,'ending');g.finishEnding();assert.equal(g.s.mode,'won');assert.equal(g.memory.cycles,1);assert.equal(g.memory.wins,1);assert.equal(g.memory.scarHeat,false);});
+test('launch without two solved hypotheses rewinds to spawn and does not open an ending',()=>{
+  const events=[];const g=new Game(newMemory(),e=>events.push(e));g.start(true);
+  charge(g);g.interact();assert.equal(g.s.isolated,true);assert.equal(g.s.cold,1);at(g,'breaker');g.interact();assert.equal(g.podPower,true);at(g,'terminal');g.interact();assert.equal(g.s.mode,'launch');
+  advance(g,2.05);assert.equal(g.s.mode,'rewind');assert.equal(g.memory.wins,0);
+  advance(g,1);assert.notEqual(g.s.mode,'won');assert.notEqual(g.s.mode,'trueend');assert.notEqual(g.s.mode,'ending');
+  assert.deepEqual(g.s.player,SPAWN);assert.equal(g.s.loopHint,'逃出的是舱。环还在。');assert.ok(events.some(e=>e.type==='loop-hint'&&e.detail==='逃出的是舱。环还在。'));assert.equal(g.memory.wins,0);
+});
+test('two solved hypotheses plus launch is the quiet true end',()=>{
+  const {g}=setup();g.memory.solvedQuestions=['q_gate','q_cold'];g.memory.activeQuestionId=null;
+  charge(g);g.interact();at(g,'breaker');g.interact();at(g,'terminal');g.interact();advance(g,2.05);
+  assert.equal(g.s.mode,'trueend');assert.equal(g.memory.wins,1);assert.equal(g.s.loopHint,'');assert.equal(g.memory.scarHeat,false);
+});
 test('manual reset resets every physical field and preserves observations/logs/settings',()=>{const {g}=setup();charge(g);g.interact();g.memory.logs.push('log-grid');g.memory.settings.volume=.2;g.requestReset();advance(g,1.3);assert.equal(g.s.charge,0);assert.equal(g.s.isolated,false);assert.equal(g.s.main,true);assert.deepEqual(g.memory.logs,['log-grid']);assert.ok(g.memory.discoveries.includes('isolate'));assert.equal(g.memory.settings.volume,.2);});
 test('pause and records do not consume time or charge',()=>{const {g}=setup();at(g,'battery');g.interact();g.pause();const t=g.s.elapsed;advance(g,15);assert.equal(g.s.elapsed,t);assert.equal(g.s.charge,0);g.s.mode='records';advance(g,10);assert.equal(g.s.elapsed,t);g.resume();advance(g,1);assert.ok(g.s.elapsed>t);});
 test('scheduled outage respects manual OFF; charging stops and can resume',()=>{const {g}=setup();at(g,'breaker');g.interact();advance(g,20);assert.equal(g.s.power,false);g.interact();assert.equal(g.s.power,true);});
@@ -38,9 +51,9 @@ test('known solution traverses real geometry in one cycle with ample margin',()=
   const cutAt=g.s.elapsed;
   // Straight through the open gate and press E as soon as the terminal is in reach.
   // Detouring past the pod eats the five-second cold margin.
-  walk(-4,-3);walk(4,0);walk(5.6,1.3);g.interact();advance(g,2.05);
-  assert.equal(g.s.mode,'ending',`solution failed at t=${g.s.elapsed} cold=${g.s.cold} afterCut=${g.s.elapsed-cutAt} coldAfterIsolate=${coldAfterIsolate}`);
-  assert.equal(g.memory.cycles,1);assert.ok(g.s.elapsed<30,`solution elapsed ${g.s.elapsed}`);
+  walk(-4,-3);walk(4,0);walk(5.6,1.3);g.interact();assert.equal(g.s.mode,'launch',`launch refused at t=${g.s.elapsed} cold=${g.s.cold}`);advance(g,2.05);
+  assert.equal(g.s.mode,'rewind',`solution failed at t=${g.s.elapsed} cold=${g.s.cold} afterCut=${g.s.elapsed-cutAt} coldAfterIsolate=${coldAfterIsolate}`);
+  advance(g,1);assert.deepEqual(g.s.player,SPAWN);assert.equal(g.s.loopHint,'逃出的是舱。环还在。');assert.ok(g.memory.cycles>=2);
 });
 test('thermal can be switched once per loop and the second press does nothing',()=>{
   const {g}=setup();assert.equal(g.s.cooling,'energy');assert.equal(g.s.thermalSwitchesLeft,1);
@@ -66,9 +79,9 @@ test('launch is refused below one cold, and cold dropping mid-launch is not a wi
   g.s.cold=1;g.s.coldClock=4.9;g.interact();assert.equal(g.s.mode,'launch');advance(g,.25);assert.equal(g.s.mode,'play');assert.ok(g.s.cold<1);assert.notEqual(g.s.mode,'ending');
 });
 test('there is no manual residual unload; carried heat sheds by one',()=>{
-  const {g}=setup();assert.equal(g.unload,undefined);g.s.heat=4;g.requestReset();
-  while(g.s.mode==='reset')g.tick(.01);
-  assert.equal(g.s.heat,carryResidual(4));assert.equal(g.memory.scarHeat,true);assert.equal(g.unload,undefined);
+  const {g}=setup();assert.equal(g.unload,undefined);g.s.heat=4;g.requestReset();assert.equal(g.s.mode,'rewind');
+  while(g.s.mode==='rewind')g.tick(.01);
+  assert.equal(g.s.heat,carryResidual(4));assert.equal(g.memory.scarHeat,true);assert.equal(g.s.loopHint,'');assert.equal(g.unload,undefined);
 });
 test('half-ready is absent until progress, then offers 50% charge without isolation or a remembered mode',()=>{
   const {g}=setup();assert.equal(g.s.mode,'play');assert.equal(g.shortcutReady(),false);

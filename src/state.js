@@ -1,4 +1,4 @@
-import { RULES, FE, SWITCHES_PER_LOOP, SPAWN, DEVICES, KNOWLEDGE, LOGS, COPY, questionById, nextQuestion } from './config.js';
+import { RULES, FE, SWITCHES_PER_LOOP, SPAWN, DEVICES, KNOWLEDGE, LOGS, COPY, TRUE_END_SOLVED, questionById, nextQuestion } from './config.js';
 import { carryResidual, stepThermal, launchDenial } from './thermal.js';
 import { move, visible, clearGate } from './movement.js';
 
@@ -50,6 +50,10 @@ export class Game {
       launch: 0,
       ending: 0,
       resetTime: 0,
+      rewindTime: 0,
+      rewindKind: '',
+      waveFlash: 0,
+      loopHint: '',
       started: false,
       outageSeen: false,
       mid: false,
@@ -86,7 +90,7 @@ export class Game {
     if (fresh) this.memory = newMemory(this.memory.settings);
     this.beginCycle();
   }
-  beginCycle() {
+  beginCycle(opts = {}) {
     const heat = carryResidual(this.memory.residualHeat);
     const offer = this.shortcutReady();
     this.s = this.initial();
@@ -108,6 +112,11 @@ export class Game {
       if (this.memory.activeQuestionId === 'q_residual') this.s.residualVerified = true;
     }
     this.resolveQuestions();
+    if (opts.wave) this.s.waveFlash = .55;
+    if (opts.fake) {
+      this.s.loopHint = COPY.fakeEscape;
+      this.emit('loop-hint', COPY.fakeEscape);
+    }
     if (offer) this.emit('brief');
     this.emit('save');
   }
@@ -130,20 +139,36 @@ export class Game {
     this.emit('ready', !!half);
     this.emit('save');
   }
+  trueEscapeReady() { return this.memory.solvedQuestions.length >= TRUE_END_SOLVED; }
   requestReset() { if (['play', 'launch'].includes(this.s.mode)) this.reset(false); }
-  reset(natural = true) {
+  armRewind(kind) {
+    if (this.s.mode === 'rewind') return;
     const s = this.s;
-    if (s.sawHot || s.sawOverheat || s.overheated || s.heat >= 3.5) this.memory.scarHeat = true;
-    if (s.launchDeniedCold) this.memory.scarFrost = true;
-    this.memory.residualHeat = s.heat;
-    s.mode = 'reset';
-    s.resetTime = 0;
-    if (natural) this.discover('loop');
-    this.emit('reset', natural);
-    this.emit('save');
+    this.pendingLoop = {
+      kind,
+      natural: kind !== 'manual',
+      heat: s.heat,
+      scarHeat: !!(s.sawHot || s.sawOverheat || s.overheated || s.heat >= 3.5),
+      scarFrost: !!s.launchDeniedCold,
+    };
+    s.mode = 'rewind';
+    s.rewindTime = 0;
+    s.rewindKind = kind;
+    this.emit('rewind', kind);
   }
-  skipReset() { if (this.s.mode === 'reset') this.beginCycle(); }
-  finishEnding() { if (this.s.mode === 'ending' && this.s.ending >= 5) { this.s.mode = 'won'; this.emit('save'); } }
+  finishRewind() {
+    const pending = this.pendingLoop || { kind: 'wave', natural: true, heat: FE.baseHeat, scarHeat: false, scarFrost: false };
+    if (pending.scarHeat) this.memory.scarHeat = true;
+    if (pending.scarFrost) this.memory.scarFrost = true;
+    if (Number.isFinite(pending.heat)) this.memory.residualHeat = pending.heat;
+    if (pending.natural) this.discover('loop');
+    this.pendingLoop = null;
+    this.emit('reset', pending.natural);
+    this.beginCycle({ wave: true, fake: pending.kind === 'fake' });
+  }
+  reset(natural = true) { this.armRewind(natural ? 'wave' : 'manual'); }
+  skipReset() { if (this.s.mode === 'rewind') this.finishRewind(); }
+  finishEnding() { if (this.s.mode === 'trueend') { this.s.mode = 'trueend'; this.emit('save'); } }
   pause() { if (this.s.mode === 'play') { this.s.mode = 'pause'; this.emit('save'); } }
   resume() { if (['pause', 'records', 'settings', 'help', 'log'].includes(this.s.mode)) this.s.mode = 'play'; }
   nearest() {
@@ -362,12 +387,12 @@ export class Game {
   }
   step(dt, input) {
     const s = this.s;
-    if (s.mode === 'reset') {
-      s.resetTime += dt;
-      if (s.resetTime >= 1.25) this.beginCycle();
+    if (s.mode === 'rewind') {
+      s.rewindTime += dt;
+      if (s.rewindTime >= .72) this.finishRewind();
       return;
     }
-    if (s.mode === 'ending') { s.ending = Math.min(RULES.ending, s.ending + dt); return; }
+    if (s.mode === 'trueend') { s.ending = Math.min(RULES.ending, s.ending + dt); return; }
     if (!['play', 'launch'].includes(s.mode)) return;
     if (s.mode === 'play') {
       const dx = input.x || 0, dz = input.z || 0;
@@ -375,6 +400,7 @@ export class Game {
       if (dx || dz) { s.started = true; s.facing = Math.atan2(dx, dz); }
     } else s.moving = false;
     if (!s.started) return;
+    if (s.waveFlash > 0) s.waveFlash = Math.max(0, s.waveFlash - dt);
     if (s.scarPulse > 0) s.scarPulse = Math.max(0, s.scarPulse - dt);
     if (s.isolating) {
       s.isolateDelay = Math.max(0, s.isolateDelay - dt);
@@ -453,13 +479,15 @@ export class Game {
       } else {
         s.launch += dt;
         if (s.launch >= RULES.launch - 1e-8) {
-          s.mode = 'ending';
-          s.ending = 0;
-          this.memory.wins++;
-          this.memory.scarHeat = false;
-          this.memory.scarFrost = false;
-          this.emit('success');
-          this.emit('save');
+          if (this.trueEscapeReady()) {
+            s.mode = 'trueend';
+            s.ending = 0;
+            this.memory.wins++;
+            this.memory.scarHeat = false;
+            this.memory.scarFrost = false;
+            this.emit('trueend', COPY.trueEnd);
+            this.emit('save');
+          } else this.armRewind('fake');
         }
       }
     }
