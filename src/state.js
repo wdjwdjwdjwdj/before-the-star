@@ -1,4 +1,4 @@
-import { RULES, FE, SWITCHES_PER_LOOP, SPAWN, DEVICES, KNOWLEDGE, LOGS, COPY, TRUE_END_SOLVED, questionById, nextQuestion } from './config.js';
+import { RULES, FE, SWITCHES_PER_LOOP, SPAWN, DEVICES, KNOWLEDGE, LOGS, COPY, FAKE_ESCAPE, CORE_PULL, phaseOutside, checklistOf, questionById, nextQuestion } from './config.js';
 import { carryResidual, stepThermal, launchDenial } from './thermal.js';
 import { move, visible, clearGate } from './movement.js';
 
@@ -18,6 +18,8 @@ export function newMemory(settings = {}) {
     scarFrost: false,
     lastTrace: '',
     boardAlert: false,
+    fakeEscapes: 0,
+    clues: [],
     settings: { volume: .45, shake: true, flash: false, ...settings },
   };
 }
@@ -54,6 +56,14 @@ export class Game {
       rewindKind: '',
       waveFlash: 0,
       loopHint: '',
+      addressUnlatched: false,
+      thermalDecoupled: false,
+      coreState: 'seated',
+      corePull: 0,
+      coreHot: 0,
+      departT: 0,
+      departPhase: '',
+      checklistFlash: 0,
       started: false,
       outageSeen: false,
       mid: false,
@@ -110,11 +120,19 @@ export class Game {
     if (opts.wave) this.s.waveFlash = .55;
     if (opts.fake) {
       this.s.loopHint = COPY.fakeEscape;
+      this.s.checklistFlash = 2;
+      this.memory.fakeEscapes++;
       this.emit('loop-hint', COPY.fakeEscape);
     }
     this.emit('save');
   }
-  trueEscapeReady() { return this.memory.solvedQuestions.length >= TRUE_END_SOLVED; }
+  trueEscapeReady() {
+    const s = this.s;
+    return s.charge >= 1 && s.isolated && s.addressUnlatched && s.thermalDecoupled && s.cold >= 1 && s.coreState === 'anchored' && !s.main && !s.power && phaseOutside(s.elapsed);
+  }
+  noteClue(id) {
+    if (!this.memory.clues.includes(id)) { this.memory.clues.push(id); this.emit('save'); }
+  }
   requestReset() { if (['play', 'launch'].includes(this.s.mode)) this.reset(false); }
   armRewind(kind) {
     if (this.s.mode === 'rewind') return;
@@ -143,6 +161,46 @@ export class Game {
   }
   reset(natural = true) { this.armRewind(natural ? 'wave' : 'manual'); }
   skipReset() { if (this.s.mode === 'rewind') this.finishRewind(); }
+  armDepart(isTrue) {
+    const s = this.s;
+    if (s.sawHot || s.sawOverheat || s.overheated || s.heat >= 3.5) this.memory.scarHeat = true;
+    if (s.launchDeniedCold) this.memory.scarFrost = true;
+    if (Number.isFinite(s.heat)) this.memory.residualHeat = s.heat;
+    s.mode = isTrue ? 'trueEscape' : 'fakeEscape';
+    s.departT = 0;
+    s.departPhase = 'hold';
+    s.launch = RULES.launch;
+    this.emit(isTrue ? 'trueEscape' : 'fakeEscape');
+  }
+  stepDepart(dt) {
+    const s = this.s;
+    const prev = s.departT;
+    s.departT += dt;
+    const holdEnd = FAKE_ESCAPE.flyHold;
+    const shockEnd = holdEnd + FAKE_ESCAPE.shockVisible;
+    const flashEnd = shockEnd + FAKE_ESCAPE.rewindFlash;
+    const blackEnd = flashEnd + FAKE_ESCAPE.blackout;
+    const t = s.departT;
+    if (s.mode === 'fakeEscape') {
+      s.departPhase = t < holdEnd ? 'hold' : t < shockEnd ? 'shock' : t < flashEnd ? 'flash' : t < blackEnd ? 'black' : 'land';
+      if (prev < holdEnd && t >= holdEnd) this.emit('broadcast', COPY.waitStar);
+      if (t >= blackEnd) this.beginCycle({ fake: true, wave: true });
+      return;
+    }
+    const trueBlack = shockEnd;
+    const trueEnd = shockEnd + FAKE_ESCAPE.blackout;
+    s.departPhase = t < holdEnd ? 'hold' : t < shockEnd ? 'shock' : t < trueEnd ? 'black' : 'end';
+    if (prev < trueBlack && t >= trueBlack) this.emit('still');
+    if (t >= trueEnd) {
+      s.mode = 'won';
+      s.ending = 0;
+      this.memory.wins++;
+      this.memory.scarHeat = false;
+      this.memory.scarFrost = false;
+      this.emit('trueend', COPY.trueEnd);
+      this.emit('save');
+    }
+  }
   finishEnding() { if (this.s.mode === 'trueend') { this.s.mode = 'trueend'; this.emit('save'); } }
   pause() { if (this.s.mode === 'play') { this.s.mode = 'pause'; this.emit('save'); } }
   resume() { if (['pause', 'records', 'settings', 'help', 'log'].includes(this.s.mode)) this.s.mode = 'play'; }
@@ -165,6 +223,13 @@ export class Game {
       return '开始充电';
     }
     if (id === 'gate') return s.power ? '查看门锁 · 有电锁闭' : '查看门锁 · 失电释放';
+    if (id === 'address-latch') return s.addressUnlatched ? '复位注销栓' : '拉下注销栓';
+    if (id === 'heat-valve') return s.thermalDecoupled ? '阀门回到耦合' : '拧至热解耦';
+    if (id === 'return-core') return s.coreState === 'pulling' ? '拔出中' : s.coreState === 'held' ? '核心在手中' : s.coreState === 'anchored' ? '核心已入舱锚' : '拔出返照核心';
+    if (id === 'phase-anchor') return s.coreState === 'anchored' ? '相位锚已锁定' : '插入返照核心';
+    if (id === 'phase-band') return '读相位窗铭牌';
+    if (id === 'handoff-list') return '看交接清单';
+    if (id === 'serial-plate') return '对照序列号';
     if (id === 'terminal') return s.mode === 'launch' ? '发射序列执行中' : '启动逃生舱';
     return '阅读' + (LOGS[id]?.title.split(' / ')[0] || '日志');
   }
@@ -185,6 +250,10 @@ export class Game {
       if (s.cold < 1) return '储冷低于保障线。现在启动会被驳回。';
       return '启动条件：主网断开、电池满且隔离，发射 2 秒内冷 ≥ 1。';
     }
+    if (id === 'address-latch') return s.addressUnlatched ? '复位后，这块电会回到站体采样表。' : '拉下后，本节点退出站体采样表。';
+    if (id === 'heat-valve') return s.cold < 1 ? '储冷不够，阀门会拒转。' : '拧开站与舱之间的热耦合。';
+    if (id === 'return-core') return '拔出要 1.2 秒。中途储冷掉破 1，核心会弹回座。';
+    if (id === 'phase-anchor') return s.coreState === 'held' ? '把返照核心插入舱侧相位锚。' : '锚座空着。';
     if (id === 'thermal') {
       if (s.thermalSwitchesLeft <= 0) return '本环温控已锁定，再拨也会被拒绝。';
       if (s.cooling === 'energy') return '拨向休眠：充电会堆冷，热负荷一起涨。';
@@ -302,6 +371,43 @@ export class Game {
       this.emit('feedback', '开始充电。预计四秒，可离开设备。');
       return;
     }
+    if (id === 'address-latch') {
+      s.addressUnlatched = !s.addressUnlatched;
+      this.emit('latch');
+      this.emit('feedback', s.addressUnlatched ? COPY.latchPull : '注销栓复位。节点回到站体采样表。');
+      return;
+    }
+    if (id === 'heat-valve') {
+      if (!s.thermalDecoupled && s.cold < 1) { this.emit('deny', COPY.valveTurn); return; }
+      s.thermalDecoupled = !s.thermalDecoupled;
+      this.emit('valve');
+      this.emit('feedback', s.thermalDecoupled ? COPY.valveTurn : '阀门回到耦合。站舱热账重新接上。');
+      return;
+    }
+    if (id === 'return-core') {
+      if (s.coreState === 'anchored') { this.emit('feedback', '核心已在舱侧相位锚上。'); return; }
+      if (s.coreState === 'held') { this.emit('feedback', '核心在你手里。送到逃生舱的相位锚。'); return; }
+      if (s.coreState === 'pulling') return;
+      if (s.cold < 1) { s.coreHot = 1.2; this.emit('deny', '储冷未达标。核心弹回实验座。'); return; }
+      s.coreState = 'pulling';
+      s.corePull = 0;
+      this.emit('feedback', COPY.corePlate);
+      return;
+    }
+    if (id === 'phase-anchor') {
+      if (s.coreState !== 'held') { this.emit('deny', '相位锚空着。先拔下返照核心。'); return; }
+      s.coreState = 'anchored';
+      this.emit('anchor');
+      this.emit('feedback', COPY.anchorLock);
+      return;
+    }
+    if (id === 'phase-band') { this.noteClue('E'); this.emit('feedback', COPY.phasePlate); return; }
+    if (id === 'handoff-list') {
+      this.noteClue('G');
+      this.emit('feedback', checklistOf(s).map(c => `${c.on ? '☑' : '□'} ${c.label}`).join(' · '));
+      return;
+    }
+    if (id === 'serial-plate') { this.noteClue('C'); this.emit('feedback', COPY.serialPlate); return; }
     if (id === 'gate') {
       s.confirmedGate = true;
       this.discover('gate');
@@ -362,6 +468,7 @@ export class Game {
   }
   step(dt, input) {
     const s = this.s;
+    if (s.mode === 'fakeEscape' || s.mode === 'trueEscape') { this.stepDepart(dt); return; }
     if (s.mode === 'rewind') {
       s.rewindTime += dt;
       if (s.rewindTime >= .72) this.finishRewind();
@@ -376,6 +483,8 @@ export class Game {
     } else s.moving = false;
     if (!s.started) return;
     if (s.waveFlash > 0) s.waveFlash = Math.max(0, s.waveFlash - dt);
+    if (s.checklistFlash > 0) s.checklistFlash = Math.max(0, s.checklistFlash - dt);
+    if (s.coreHot > 0) s.coreHot = Math.max(0, s.coreHot - dt);
     if (s.scarPulse > 0) s.scarPulse = Math.max(0, s.scarPulse - dt);
     if (s.isolating) {
       s.isolateDelay = Math.max(0, s.isolateDelay - dt);
@@ -390,6 +499,23 @@ export class Game {
       }
     }
     const report = stepThermal(s, dt);
+    if (s.coreState === 'pulling') {
+      if (s.cold < 1) {
+        s.coreState = 'seated';
+        s.corePull = 0;
+        s.coreHot = 1.2;
+        this.emit('deny', '储冷跌破。核心弹回实验座。');
+      } else {
+        s.corePull += dt;
+        if (s.corePull >= CORE_PULL) {
+          s.coreState = 'held';
+          s.corePull = 0;
+          s.heat = Math.min(FE.safeHeat, s.heat + 1);
+          this.emit('core');
+          this.emit('feedback', COPY.coreOut);
+        }
+      }
+    }
     if (report.chargingTime > 0 && s.cooling === 'cryo') {
       s.heatVerified = true;
       this.discover('heat');
@@ -453,17 +579,7 @@ export class Game {
         this.denyLaunch(code);
       } else {
         s.launch += dt;
-        if (s.launch >= RULES.launch - 1e-8) {
-          if (this.trueEscapeReady()) {
-            s.mode = 'trueend';
-            s.ending = 0;
-            this.memory.wins++;
-            this.memory.scarHeat = false;
-            this.memory.scarFrost = false;
-            this.emit('trueend', COPY.trueEnd);
-            this.emit('save');
-          } else this.armRewind('fake');
-        }
+        if (s.launch >= RULES.launch - 1e-8) this.armDepart(this.trueEscapeReady());
       }
     }
   }

@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Game, newMemory } from '../src/state.js';
-import { RULES, FE, SPAWN } from '../src/config.js';
+import { RULES, FE, SPAWN, DEVICES } from '../src/config.js';
 import { carryResidual } from '../src/thermal.js';
 import { move, free, visible, clearGate } from '../src/movement.js';
 function setup(){const events=[];const g=new Game(newMemory(),e=>events.push(e));g.start(true);return {g,events};}
 function advance(g,seconds){for(let n=0;n<Math.round(seconds*100);n++)g.tick(.01);}
-function at(g,id){g.s.player={...({breaker:{x:-7.4,z:-3.5},battery:{x:.1,z:-2.9},thermal:{x:2.25,z:-2.5},gate:{x:2.8,z:0},terminal:{x:7.3,z:2.5}}[id])};assert.equal(g.nearest()?.id,id);}
+function at(g,id){const known={breaker:{x:-7.4,z:-3.5},battery:{x:.1,z:-2.9},thermal:{x:2.25,z:-2.5},gate:{x:2.8,z:0},terminal:{x:7.3,z:2.5}};const d=known[id]||DEVICES.find(x=>x.id===id);g.s.player={x:d.x,z:d.z};assert.equal(g.nearest()?.id,id,`${id} lost to ${g.nearest()?.id}`);}
 function charge(g){at(g,'battery');g.interact();advance(g,4.05);assert.equal(g.s.charge,1);}
 
 test('rules keep the V2 clock and the scheme-C thermal numbers',()=>{
@@ -23,17 +23,21 @@ test('idle: the 42s shock starts rewind immediately, then lands on spawn with no
 });
 test('main off releases gate but pod refuses powerless launch',()=>{const {g}=setup();at(g,'breaker');g.interact();assert.equal(g.s.power,false);at(g,'terminal');g.interact();assert.equal(g.s.mode,'play');assert.equal(g.podPower,false);assert.ok(g.memory.discoveries.includes('pod'));});
 test('full but NOT isolated battery drains to common grid; no backup launch',()=>{const {g}=setup();charge(g);at(g,'breaker');g.interact();assert.equal(g.podPower,false);assert.ok(g.memory.discoveries.includes('drain'));at(g,'terminal');g.interact();assert.equal(g.s.mode,'play');advance(g,1.6);assert.equal(g.s.charge,0);});
-test('launch without two solved hypotheses rewinds to spawn and does not open an ending',()=>{
+test('classic launch without the four keys is a 13s fake escape then the cabin line',()=>{
   const events=[];const g=new Game(newMemory(),e=>events.push(e));g.start(true);
   charge(g);g.interact();assert.equal(g.s.isolated,true);assert.equal(g.s.cold,1);at(g,'breaker');g.interact();assert.equal(g.podPower,true);at(g,'terminal');g.interact();assert.equal(g.s.mode,'launch');
-  advance(g,2.05);assert.equal(g.s.mode,'rewind');assert.equal(g.memory.wins,0);
-  advance(g,1);assert.notEqual(g.s.mode,'won');assert.notEqual(g.s.mode,'trueend');assert.notEqual(g.s.mode,'ending');
-  assert.deepEqual(g.s.player,SPAWN);assert.equal(g.s.loopHint,'逃出的是舱。环还在。');assert.ok(events.some(e=>e.type==='loop-hint'&&e.detail==='逃出的是舱。环还在。'));assert.equal(g.memory.wins,0);
+  advance(g,2.05);assert.equal(g.s.mode,'fakeEscape');assert.equal(g.memory.wins,0);
+  const clock=g.s.elapsed;advance(g,5);assert.equal(g.s.elapsed,clock);assert.equal(g.s.departPhase,'shock');assert.ok(events.some(e=>e.detail==='恒星扫过。请保持姿势。'));
+  advance(g,8.2);assert.equal(g.s.mode,'play');assert.deepEqual(g.s.player,SPAWN);assert.equal(g.s.loopHint,'逃出的是舱。环还在。');assert.equal(g.s.charge,0);assert.ok(g.s.checklistFlash>0);
 });
-test('two solved hypotheses plus launch is the quiet true end',()=>{
-  const {g}=setup();g.memory.solvedQuestions=['q_gate','q_cold'];g.memory.activeQuestionId=null;
-  charge(g);g.interact();at(g,'breaker');g.interact();at(g,'terminal');g.interact();advance(g,2.05);
-  assert.equal(g.s.mode,'trueend');assert.equal(g.memory.wins,1);assert.equal(g.s.loopHint,'');assert.equal(g.memory.scarHeat,false);
+test('all exit keys outside the last eight seconds end on the quiet true line',()=>{
+  const events=[];const g=new Game(newMemory(),e=>events.push(e));g.start(true);
+  charge(g);g.interact();at(g,'address-latch');g.interact();at(g,'heat-valve');g.interact();
+  at(g,'return-core');g.interact();advance(g,1.25);assert.equal(g.s.coreState,'held');
+  at(g,'phase-anchor');g.interact();assert.equal(g.s.coreState,'anchored');
+  at(g,'breaker');g.interact();assert.ok(g.s.elapsed<RULES.cycle-8);
+  at(g,'terminal');g.interact();advance(g,2.05);assert.equal(g.s.mode,'trueEscape');
+  advance(g,11);assert.equal(g.s.mode,'won');assert.equal(g.memory.wins,1);assert.ok(events.some(e=>e.detail==='采样表外。环在身后。'));assert.equal(g.memory.cycles,1);
 });
 test('manual reset resets every physical field and preserves observations/logs/settings',()=>{const {g}=setup();charge(g);g.interact();g.memory.logs.push('log-grid');g.memory.settings.volume=.2;g.requestReset();advance(g,1.3);assert.equal(g.s.charge,0);assert.equal(g.s.isolated,false);assert.equal(g.s.main,true);assert.deepEqual(g.memory.logs,['log-grid']);assert.ok(g.memory.discoveries.includes('isolate'));assert.equal(g.memory.settings.volume,.2);});
 test('pause and records do not consume time or charge',()=>{const {g}=setup();at(g,'battery');g.interact();g.pause();const t=g.s.elapsed;advance(g,15);assert.equal(g.s.elapsed,t);assert.equal(g.s.charge,0);g.s.mode='records';advance(g,10);assert.equal(g.s.elapsed,t);g.resume();advance(g,1);assert.ok(g.s.elapsed>t);});
@@ -52,8 +56,8 @@ test('known solution traverses real geometry in one cycle with ample margin',()=
   // Straight through the open gate and press E as soon as the terminal is in reach.
   // Detouring past the pod eats the five-second cold margin.
   walk(-4,-3);walk(4,0);walk(5.6,1.3);g.interact();assert.equal(g.s.mode,'launch',`launch refused at t=${g.s.elapsed} cold=${g.s.cold}`);advance(g,2.05);
-  assert.equal(g.s.mode,'rewind',`solution failed at t=${g.s.elapsed} cold=${g.s.cold} afterCut=${g.s.elapsed-cutAt} coldAfterIsolate=${coldAfterIsolate}`);
-  advance(g,1);assert.deepEqual(g.s.player,SPAWN);assert.equal(g.s.loopHint,'逃出的是舱。环还在。');assert.ok(g.memory.cycles>=2);
+  assert.equal(g.s.mode,'fakeEscape',`solution failed at t=${g.s.elapsed} cold=${g.s.cold} afterCut=${g.s.elapsed-cutAt} coldAfterIsolate=${coldAfterIsolate}`);
+  advance(g,13.1);assert.deepEqual(g.s.player,SPAWN);assert.equal(g.s.loopHint,'逃出的是舱。环还在。');assert.ok(g.memory.cycles>=2);
 });
 test('thermal can be switched once per loop and the second press does nothing',()=>{
   const {g}=setup();assert.equal(g.s.cooling,'energy');assert.equal(g.s.thermalSwitchesLeft,1);

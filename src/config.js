@@ -39,6 +39,13 @@ export const DEVICES = [
   { id: 'thermal', name: '循环温控分配器', x: 2.25, z: -3.9 },
   { id: 'gate', name: '断电释放安全门', x: 4, z: 0 },
   { id: 'terminal', name: '逃生舱发射终端', x: 7.3, z: 1.65 },
+  { id: 'address-latch', name: '寻址注销栓', x: 0.9, z: -1.4 },
+  { id: 'heat-valve', name: '热解耦阀', x: -10.0, z: 5.2 },
+  { id: 'return-core', name: '返照核心', x: -10.4, z: -4.2 },
+  { id: 'phase-anchor', name: '相位锚', x: 8.7, z: -1.5 },
+  { id: 'phase-band', name: '相位窗灯带', x: 3.15, z: 1.85 },
+  { id: 'handoff-list', name: '交接清单', x: 1.2, z: 0.6 },
+  { id: 'serial-plate', name: '电池序列铭牌', x: -1.35, z: -2.45 },
   { id: 'log-wake', name: '值守员便笺', x: -10.6, z: 1.4 },
   { id: 'log-grid', name: '维护铭牌', x: 2.8, z: 3.5 },
   { id: 'log-star', name: '观测记录', x: 10.6, z: 2.8 },
@@ -77,9 +84,38 @@ export const COPY = {
   denyCold: '撤离许可驳回：休眠乘员仍在站体锚点热耦合内。先把储冷与余热压到规程窗，再申请离站。',
   denyPhase: '撤离许可驳回：当前相位仍属回环采样窗。乘员若在此刻离舱，将被记入下一帧「站体状态」而非「离站状态」。',
   fakeEscape: '逃出的是舱。环还在。',
-  trueEnd: '环已偏开。',
+  trueEnd: '采样表外。环在身后。',
+  waitStar: '恒星扫过。请保持姿势。',
+  latchPlate: '寻址注销栓 · 解除后本节点退出站体采样表',
+  latchPull: '拉下注销栓。脉冲仍会到点——只是不再把你写进下一帧。',
+  valvePlate: '热解耦阀 · 断开站—舱热耦合后方可记为离站态',
+  valveTurn: '阀门拧至解耦。储冷未达标时禁止操作。余热账仍保留。',
+  corePlate: '返照核心 · RETURN 采样基准 · 拔出前确认储冷裕度',
+  coreOut: '核心离座。余热上升。请尽快插入逃生舱相位锚。',
+  anchorPlate: '相位锚 · 接入返照核心后，本舱使用独立相位，不再跟站钟闭合',
+  anchorLock: '相位锚已锁定。舱侧时钟与站体采样脱开。',
+  fold: '环在折返',
+  phasePlate: '采样窗内离站 → 记入站体状态帧。窗后离站 → 记入离站帧。',
+  serialPlate: 'BAT-07A 母站侧。舱侧印 BAT-07A′ 已隔离副本——采样窗内仍计站体资产。',
 };
-export const TRUE_END_SOLVED = 2;
+export const FAKE_ESCAPE = Object.freeze({ flyHold: 3, shockVisible: 6, rewindFlash: 2, blackout: 2 });
+export const PHASE_INSIDE_LAST = 8;
+export const CORE_PULL = 1.2;
+export const CHECKS = [
+  { id: 'addr', label: '电／资产已退出站体寻址' },
+  { id: 'heat', label: '热账低于离站阈 · 已热解耦' },
+  { id: 'phase', label: '乘员／舱体不在采样窗耦合' },
+  { id: 'core', label: '返照核心已迁入舱侧相位锚' },
+];
+export function phaseOutside(elapsed) { return elapsed < RULES.cycle - PHASE_INSIDE_LAST; }
+export function checklistOf(s) {
+  return [
+    { ...CHECKS[0], on: !!(s.addressUnlatched && s.isolated && s.charge >= 1) },
+    { ...CHECKS[1], on: !!(s.thermalDecoupled && s.cold >= 1) },
+    { ...CHECKS[2], on: phaseOutside(s.elapsed || 0) },
+    { ...CHECKS[3], on: s.coreState === 'anchored' },
+  ];
+}
 export const HINTS = [
   '维护室里有一块备用电池。试着在主电源开启时接通它。',
   '门锁和逃生舱都连接主电源，但它们需要的状态相反。留意电池充满后出现的新操作。',

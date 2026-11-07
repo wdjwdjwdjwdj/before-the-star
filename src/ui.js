@@ -1,4 +1,4 @@
-import { KNOWLEDGE, LOGS, HINTS, RULES, FE, questionById, roomAt } from './config.js';
+import { KNOWLEDGE, LOGS, HINTS, RULES, FE, questionById, roomAt, checklistOf } from './config.js';
 import { formatTime, save } from './storage.js';
 const key = s => `<kbd>${s}</kbd>`;
 const escapeHtml = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -11,6 +11,7 @@ export class UI {
       <div class="hud-right"><span id="cycle-num">第 01 环</span><button data-action="records" aria-label="本环假设">${key('Tab')} 本环假设 <b id="new-count"></b></button><button class="icon-button" data-action="pause" aria-label="暂停">Ⅱ</button></div>
       <div id="vitals"><span id="vital-mode">能源优先</span><span id="vital-heat">H 2.0</span><span id="vital-cold">C 2.0</span><span id="vital-switch">温控 1</span></div>
       <p id="hypothesis-now"></p>
+      <div id="check-row" aria-label="交接清单"></div>
       <div id="broadcast"><span>站内广播</span><p></p></div>
       <div id="discovery-toast"></div>
       <div id="context"><p id="cost-preview" hidden></p><span id="target-name"></span><button id="interact" data-action="interact"></button><small id="device-status"></small></div>
@@ -18,9 +19,9 @@ export class UI {
       <div id="reset-hold"><i></i><span>环在收回这一圈</span></div>
       <div class="bottom-hint">${key('W A S D')} 移动 <span> / </span> ${key('E')} 交互 <span> / </span> ${key('Tab')} 假设</div>
       <div id="touch-controls"><div class="dpad"><button data-move="up" aria-label="向前">▲</button><button data-move="left" aria-label="向左">◀</button><button data-move="down" aria-label="向后">▼</button><button data-move="right" aria-label="向右">▶</button></div><button class="touch-e" data-action="interact">E</button></div>
-    </div><div id="rewind-tag" hidden>环在折返</div><div id="loop-hint" hidden></div><div id="cinematic-window" hidden><div class="window-rim"></div><span>逃生舱 / 舷窗视野</span><p>恒星脉冲再次扫过曙光站。</p><button class="primary" data-action="settle" hidden>查看结算 ↗</button></div><div id="overlay"></div><div id="pulse-overlay" hidden></div><div id="fatal" hidden></div>`;
+    </div><div id="depart-black" hidden></div><div id="rewind-tag" hidden>环在折返</div><div id="loop-hint" hidden></div><div id="cinematic-window" hidden><div class="window-rim"></div><span>逃生舱 / 舷窗视野</span><p>恒星脉冲再次扫过曙光站。</p><button class="primary" data-action="settle" hidden>查看结算 ↗</button></div><div id="overlay"></div><div id="pulse-overlay" hidden></div><div id="fatal" hidden></div>`;
     this.hintUntil=0;
-    this.el={};for(const id of ['hud','overlay','room-name','power-status','cycle-num','remaining','clock-arc','broadcast','discovery-toast','context','target-name','interact','device-status','new-count','reset-hold','launch-status','pulse-overlay','cost-preview','vital-mode','vital-heat','vital-cold','vital-switch','loop-hint','rewind-tag','hypothesis-now'])this.el[id]=document.getElementById(id);
+    this.el={};for(const id of ['hud','overlay','room-name','power-status','cycle-num','remaining','clock-arc','broadcast','discovery-toast','context','target-name','interact','device-status','new-count','reset-hold','launch-status','pulse-overlay','cost-preview','vital-mode','vital-heat','vital-cold','vital-switch','loop-hint','rewind-tag','hypothesis-now','check-row','depart-black'])this.el[id]=document.getElementById(id);
     document.querySelector('#app').addEventListener('click',e=>{const b=e.target.closest('[data-action]');if(b){e.preventDefault();e.stopPropagation();this.action(b.dataset.action);}});
     document.querySelector('#app').addEventListener('input',e=>{if(e.target.id==='volume'){game.memory.settings.volume=Number(e.target.value)/100;document.getElementById('volume-value').textContent=e.target.value+'%';save(game.memory);}});
     document.querySelector('#app').addEventListener('change',e=>{if(['shake','flash'].includes(e.target.id)){game.memory.settings[e.target.id]=e.target.checked;save(game.memory);}});
@@ -50,6 +51,7 @@ export class UI {
   }
   action(a) {
     const g=this.game;
+    if(['fakeEscape','trueEscape','rewind'].includes(g.s.mode))return;
     if(a==='new'){if(g.memory.cycles>0){this.screen='confirm';this.renderScreen();}else this.start(true);}
     if(a==='confirm-new')this.start(true);
     if(a==='cancel-new'){this.screen='title';this.renderScreen();}
@@ -79,7 +81,7 @@ export class UI {
     if(this.screen==='settings')html=this.shell(`<span class="eyebrow">PREFERENCES / 本地保存</span><h2>感官设置</h2><label class="setting">音量 <span id="volume-value">${Math.round(m.settings.volume*100)}%</span><input id="volume" aria-label="音量" type="range" min="0" max="100" value="${Math.round(m.settings.volume*100)}"></label><label class="toggle"><span>镜头轻微震动<small>发射和循环重置时</small></span><input id="shake" type="checkbox" ${m.settings.shake?'checked':''}></label><label class="toggle"><span>强闪光效果<small>默认关闭；关闭时使用柔和暗色脉冲</small></span><input id="flash" type="checkbox" ${m.settings.flash?'checked':''}></label><button class="primary" data-action="back">保存并返回</button>`);
     if(this.screen==='records')html=this.shell(`<div class="panel-head"><div><span class="eyebrow">OPEN QUESTION / 时间已暂停</span><h2>本环假设</h2></div><button data-action="resume" aria-label="关闭认知记录">${key('Tab')} 关闭</button></div><div class="records-layout"><div><div class="hypothesis">${this.hypothesis()}</div>${this.axis()}${m.lastTrace?`<p class="trace">${escapeHtml(m.lastTrace)}</p>`:''}<div class="station-map">${this.map()}</div><small>蓝点：你的位置 · 橙色：安全门 · 温控在维护室南侧</small><p class="archive-stat">第 ${m.cycles} 环 · 累计 ${formatTime(m.total)} · ${g.s.cooling==='energy'?'能源优先':'休眠优先'}</p><div class="hint-box"><span class="eyebrow">按需提示</span><p>${this.hintText||'需要另一个观察角度时，再向这里提问。'}</p><button data-action="hint">${this.hintText?'再给一点提示':'请求一点提示'}</button></div></div><div class="archive-list">${this.solvedFacts()}${m.discoveries.length?m.discoveries.map(id=>`<article><span>◉</span><div><h3>${KNOWLEDGE[id].title}</h3><p>${KNOWLEDGE[id].text}</p></div></article>`).join(''):'<p class="empty">还没有留下已解事实。<br>先去验证这一环的假设。</p>'}<h3 class="logs-heading">已读日志 / ${m.logs.length}</h3>${m.logs.map(id=>`<button class="log-link" data-action="log:${id}">${LOGS[id].title} ↗</button>`).join('')}</div></div>`, 'wide');
     if(this.screen==='log'){const log=LOGS[this.currentLog];html=this.shell(`<span class="eyebrow">LOCAL DOCUMENT / 时间已暂停</span><h2>${log.title}</h2><p class="log-text">${log.text.replaceAll('\n','<br>')}</p><button class="primary" data-action="resume">收起记录 ${key('E / Esc')}</button>`);}
-    if(this.screen==='trueend')html=`<div class="ending-screen quiet-end"><span class="eyebrow">THE LOOP SHIFTS</span><h1>环已偏开。</h1><p>假设已经落地。这一次，脱离没有被环拉回去。</p><div class="actions"><button data-action="title">离开</button></div></div>`;
+    if(this.screen==='trueend')html=`<div class="ending-screen quiet-end"><span class="eyebrow">THE LOOP SHIFTS</span><h1>采样表外。环在身后。</h1><p>舱侧相位不再跟站钟闭合。</p><div class="actions"><button data-action="title">离开</button></div></div>`;
     this.el.overlay.innerHTML=html;
   }
   hypothesis() {
@@ -117,8 +119,9 @@ export class UI {
   }
   update(target, resetHeld) {
     const s=this.game.s,m=this.game.memory;
-    if(s.mode==='trueend'&&this.screen!=='trueend'){this.screen='trueend';this.clearInput();this.renderScreen();}
-    const inGame=!['title','trueend'].includes(s.mode)&&this.screen!=='trueend';
+    if((s.mode==='won'||s.mode==='trueend')&&this.screen!=='trueend'){this.screen='trueend';this.clearInput();this.renderScreen();}
+    const departing=s.mode==='fakeEscape'||s.mode==='trueEscape';
+    const inGame=!['title','trueend','won'].includes(s.mode)&&this.screen!=='trueend';
     this.el.hud.hidden=!inGame;
     const windowView=document.getElementById('cinematic-window');
     windowView.hidden=true;
@@ -127,7 +130,7 @@ export class UI {
     this.el['power-status'].className=s.power?'online':s.isolated?'backup':'offline';
     this.el['cycle-num'].textContent=`第 ${String(m.cycles).padStart(2,'0')} 环`;
     const remain=Math.max(0,RULES.cycle-s.elapsed);
-    this.el.remaining.textContent=remain<=10?remain.toFixed(1):Math.ceil(remain).toString().padStart(2,'0');
+    this.el.remaining.textContent=departing?'—':remain<=10?remain.toFixed(1):Math.ceil(remain).toString().padStart(2,'0');
     document.getElementById('cycle-clock').classList.toggle('urgent',remain<=10);
     this.el['clock-arc'].style.strokeDashoffset=220*(1-remain/RULES.cycle);
     this.el.broadcast.classList.toggle('show',performance.now()<this.messageUntil&&this.active);
@@ -142,22 +145,32 @@ export class UI {
     this.el['vital-switch'].textContent = `温控 ${s.thermalSwitchesLeft}`;
     const qNow=questionById(m.activeQuestionId);
     this.el['hypothesis-now'].textContent=qNow?`本环要看懂：${qNow.prompt}`:'这一环的问题已经落地。下一次折返再来一条。';
-    this.el.context.hidden=!target||s.mode!=='play'||!this.active;
+    const cells=checklistOf(s);
+    const flash=s.checklistFlash>0;
+    this.el['check-row'].innerHTML=cells.map(c=>`<i class="${c.on?'on':flash?'miss':''}" title="${c.label}"></i>`).join('');
+    this.el.context.hidden=departing||!target||s.mode!=='play'||!this.active;
     if(target){this.el['target-name'].textContent=target.name;this.el.interact.innerHTML=key('E')+' '+this.game.label(target.id);
       const heatLine=`热 H ${s.heat.toFixed(2)} / 5${s.overheated?' · 过热保护':s.heat>=3.5?' · 高热':''}`;
       const coldLine=`储冷 C ${s.cold.toFixed(1)} / 5${s.power?' · 主动保障':` · ${(Math.max(0,FE.coldSeconds-s.coldClock)).toFixed(1)} 秒后消耗`}`;
       const preview=this.game.preview(target.id);
       this.el['cost-preview'].hidden=!preview;this.el['cost-preview'].textContent=preview;
-      this.el['device-status'].textContent=target.id==='thermal'?`${s.cooling==='energy'?'能源优先':'休眠优先'} · 还可拨 ${s.thermalSwitchesLeft} 次 · ${heatLine} · ${coldLine}`:target.id==='battery'?`${s.isolated?'备用回路独立':s.isolating?'隔离分离中':s.charging?'输入接通':s.charge>=1?'充满 · 尚未隔离':'公共母线接入'} · ${Math.round(s.charge*100)}% · ${heatLine}`:target.id==='breaker'?`${heatLine} · ${coldLine}`:target.id==='terminal'?`${this.game.podPower?'动力输入正常':'动力输入为零'} · ${coldLine}`:'';
+      const lamp={
+        'address-latch': s.addressUnlatched?'已注销 · 青':'仍计站产 · 琥珀',
+        'heat-valve': s.thermalDecoupled?'已解耦 · 青':'仍耦合 · 琥珀',
+        'return-core': s.coreState==='held'?'持有 · 品红':s.coreState==='anchored'?'已入锚 · 冷白':s.coreState==='pulling'?'拔出中':'在座 · 白脉冲',
+        'phase-anchor': s.coreState==='anchored'?'冷白定':'等待核心',
+      };
+      this.el['device-status'].textContent=lamp[target.id]||(target.id==='thermal'?`${s.cooling==='energy'?'能源优先':'休眠优先'} · 还可拨 ${s.thermalSwitchesLeft} 次 · ${heatLine} · ${coldLine}`:target.id==='battery'?`${s.isolated?'备用回路独立':s.isolating?'隔离分离中':s.charging?'输入接通':s.charge>=1?'充满 · 尚未隔离':'公共母线接入'} · ${Math.round(s.charge*100)}% · ${heatLine}`:target.id==='breaker'?`${heatLine} · ${coldLine}`:target.id==='terminal'?`${this.game.podPower?'动力输入正常':'动力输入为零'} · ${coldLine}`:'');
     } else this.el['cost-preview'].hidden=true;
     const launch=this.el['launch-status'];launch.hidden=s.mode!=='launch';launch.querySelector('i').style.width=`${s.launch/RULES.launch*100}%`;
     this.el['reset-hold'].classList.toggle('show',resetHeld>0);this.el['reset-hold'].querySelector('i').style.width=Math.min(100,resetHeld/.8*100)+'%';
-    const rewinding=s.mode==='rewind';
+    const rewinding=s.mode==='rewind'||s.departPhase==='flash';
     this.el['rewind-tag'].hidden=!rewinding;
+    this.el['depart-black'].hidden=s.departPhase!=='black';
     const pulse=this.el['pulse-overlay'];
     const scarFlash=s.scarPulse>0&&m.settings.flash&&!rewinding;
-    pulse.hidden=!scarFlash&&!rewinding;
-    pulse.className=rewinding?'rewind-fx':scarFlash?'strong':'';
+    pulse.hidden=!scarFlash&&!rewinding&&s.departPhase!=='shock';
+    pulse.className=rewinding||s.departPhase==='shock'?'rewind-fx':scarFlash?'strong':'';
     if(scarFlash)pulse.innerHTML='<div><span>余热 / RESIDUAL</span><b>热量不回到脉冲前</b></div>';
     else pulse.innerHTML='';
     const hint=this.el['loop-hint'];

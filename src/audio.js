@@ -39,7 +39,10 @@ export class AudioSystem {
     if (['charged','discovery'].includes(type)) [520,780,1040].forEach((n,i)=>this.tone(n,.22,'sine',i*.1,.08));
     if (type === 'alarm') { this.tone(detail <= 3 ? 880 : 620,.17,'triangle',0,.09); if(detail<=3) this.tone(660,.1,'triangle',.2,.07); }
     if (type === 'reset' || type === 'rewind') this.tone(520,.45,'triangle',0,.06,40);
-    if (type === 'trueend') [220,330,440].forEach((n,i)=>this.tone(n,1.4,'sine',i*.16,.05));
+    if (type === 'latch') this.tone(180,.12,'square',0,.08,90);
+    if (type === 'fakeEscape') this.tone(90,3.2,'sine',0,.05,40);
+    if (type === 'still') this.tone(660,.6,'sine',0,.04,80);
+    if (type === 'trueend') this.tone(440,1.6,'sine',0,.05);
     if (type === 'launch') this.tone(65,2,'triangle',0,.18,260);
     if (type === 'success') [220,330,440,660].forEach((n,i)=>this.tone(n,2.1,'sine',i*.3,.07));
   }

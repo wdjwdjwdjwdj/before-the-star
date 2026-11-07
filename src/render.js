@@ -17,7 +17,7 @@ export class World {
     this.station = new THREE.Group(); this.scene.add(this.station);
     this.mainMat = this.mat(C.cyan, .25, C.cyan, 1.6); this.backupMat = this.mat(0x35505c,.3,0x48ecc5,.02);
     this.screenMat = this.mat(0x3badae,.25,C.cyan,.9); this.lockMat = this.mat(C.orange,.35,C.orange,1.5);
-    this.buildSpace(); this.buildLevel(); this.buildDevices(); this.buildPlayer();
+    this.buildSpace(); this.buildLevel(); this.buildDevices(); this.buildPlayer(); this.buildExit();
     this.marker = new THREE.Mesh(new THREE.RingGeometry(.65,.72,48),new THREE.MeshBasicMaterial({color:0xffdc98,side:THREE.DoubleSide,depthWrite:false}));
     this.marker.rotation.x = -Math.PI/2; this.marker.position.y=.08; this.scene.add(this.marker);
     this.resize(); this.onResize=()=>this.resize(); window.addEventListener('resize',this.onResize);
@@ -202,6 +202,33 @@ export class World {
     const shadow=new THREE.Mesh(new THREE.CircleGeometry(.46,24),new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:.32,depthWrite:false}));shadow.rotation.x=-Math.PI/2;shadow.position.y=.02;this.player.add(shadow);
     const ring=new THREE.Mesh(new THREE.RingGeometry(.43,.47,40),new THREE.MeshBasicMaterial({color:0xcde4dd,transparent:true,opacity:.65,side:THREE.DoubleSide}));ring.rotation.x=-Math.PI/2;ring.position.y=.025;this.player.add(ring);
   }
+  buildExit() {
+    this.latchLamp=this.box(0.9,.95,-1.7,.16,.16,.16,this.mat(0xf7a46b,.4,0xf7a46b,.4));
+    this.latchLever=this.box(0.9,1.15,-1.7,.12,.42,.12,0xf7a46b);
+    this.label('寻址注销栓',0.9,.08,-0.85,'#f7a46b',.28,2.2);
+    this.valveLamp=this.box(-10,.9,5.2,.18,.18,.18,this.mat(0xf7a46b,.4,0xf7a46b,.4));
+    this.label('热解耦阀',-9.2,.08,4.55,'#f7a46b',.28,2.2);
+    this.coreMat=this.mat(0xf4f7fb,.2,0xf4f7fb,1.4);
+    this.coreMesh=this.box(-10.4,1.05,-4.2,.42,.42,.42,this.coreMat);
+    this.label('返照核心',-10.4,.08,-3.35,'#d7f6ff',.28,2.2);
+    this.anchorMat=this.mat(0x24424a,.4,0x24424a,.2);
+    this.anchorMesh=this.box(8.7,.72,-1.5,.55,.28,.55,this.anchorMat);
+    this.label('相位锚',8.7,.08,-0.85,'#d7f6ff',.28,1.8);
+    this.phaseLamps=[];
+    for (let i=0;i<7;i++) this.phaseLamps.push(this.box(3.15,.55,0.55+i*.28,.08,.08,.16,this.mat(0xf7a46b,.3,0xf7a46b,.5)));
+    this.podClock=this.label('舱钟 同步',8.15,1.55,-0.2,'#d7f6ff',.28,1.8,undefined,true);
+    this.checkMarks=[];
+    for (let i=0;i<4;i++) this.checkMarks.push(this.box(1.05,.7,0.2+i*.22,.12,.12,.12,this.mat(0xf7a46b,.3,0xf7a46b,.4)));
+    const pts=[];
+    for (let i=-2;i<=2;i++) pts.push(-2,0,i,2,0,i,i,0,-2,i,0,2);
+    const geo=new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+    this.sampleGrid=new THREE.LineSegments(geo, new THREE.LineBasicMaterial({color:0xf7a46b,transparent:true,opacity:.9}));
+    this.sampleGrid.visible=false;
+    this.scene.add(this.sampleGrid);
+    this.coreHalo=this.box(0,1.45,0,.2,.08,.2,this.mat(0xff4fa3,.3,0xff4fa3,1.2),this.player);
+    this.coreHalo.visible=false;
+  }
   updateReadout(mesh, text, color) {
     const u = mesh.userData;
     if (u.text === text && u.lastColor === color) return;
@@ -230,9 +257,35 @@ export class World {
     this.lockMat.color.setHex(power?C.orange:C.green);this.lockMat.emissive.setHex(power?C.orange:C.green);
     this.roomLights.forEach((l,i)=>l.intensity=power?10:i===3&&s.isolated?6:1.1);
     this.key.intensity=2.8+heat*2;this.key.color.setHex(heat>.75?0xffac76:0xffdbac);
+    const insidePhase=(s.elapsed||0)>=RULES.cycle-8;
     const clockText=String(Math.ceil(Math.max(0,RULES.cycle-s.elapsed))).padStart(2,'0');
-    if(this.clock.userData.text!==clockText){const u=this.clock.userData;u.context.clearRect(0,0,1024,128);u.context.fillStyle=heat>.75?'#ff9f7f':u.color;u.context.fillText(clockText,512,64);this.clock.material.map.needsUpdate=true;u.text=clockText;}
-    this.sun.material.uniforms.time.value=t;this.sun.material.uniforms.heat.value=heat;this.glow.material.opacity=.65+heat*.35;this.sun.rotation.y=t*.015;
+    if(this.clock.userData.text!==clockText){const u=this.clock.userData;u.context.clearRect(0,0,1024,128);u.context.fillStyle=heat>.75||insidePhase?'#ff9f7f':u.color;u.context.fillText(clockText,512,64);this.clock.material.map.needsUpdate=true;u.text=clockText;}
+    if(this.podClock)this.updateReadout(this.podClock, (s.coreState==='anchored')?'舱钟 脱开':`舱钟 ${clockText}`, s.coreState==='anchored'?'#d7f6ff':'#ffd7a8');
+    const phaseBlink=insidePhase?(Math.sin(t*14)>0): (Math.sin(t*3)>0);
+    this.sun.scale.setScalar(1+(s.elapsed||0)/RULES.cycle*.08+(insidePhase?.14:0));
+    this.sun.material.uniforms.time.value=t;this.sun.material.uniforms.heat.value=heat;this.glow.material.opacity=.65+heat*.35+(insidePhase?.15:0);this.sun.rotation.y=t*.015;
+    const latchOn=!!s.addressUnlatched, valveOn=!!s.thermalDecoupled, core=s.coreState||'seated';
+    if(this.latchLamp){
+      this.latchLamp.material.color.setHex(latchOn?0x59e4c5:0xf7a46b);
+      this.latchLamp.material.emissive.setHex(latchOn?0x59e4c5:0xf7a46b);
+      this.latchLamp.material.emissiveIntensity=latchOn?1.6:(phaseBlink?1.3:.35);
+      this.latchLever.rotation.z=latchOn?1.1:.2;
+      this.valveLamp.material.color.setHex(valveOn?0x59e4c5:0xf7a46b);
+      this.valveLamp.material.emissive.setHex(valveOn?0x59e4c5:0xf7a46b);
+      this.valveLamp.material.emissiveIntensity=valveOn?1.5:(s.cold<1||phaseBlink?1.4:.3);
+      const coreColor=core==='anchored'?0xd7f6ff:core==='held'?0xff4fa3:0xf4f7fb;
+      this.coreMat.color.setHex(s.coreHot>0?0xff6056:coreColor);
+      this.coreMat.emissive.setHex(s.coreHot>0?0xff6056:coreColor);
+      this.coreMat.emissiveIntensity=core==='seated'?(Math.sin(t*2*Math.PI*(1/42)*8)>0?1.8:.4):core==='held'?0.15:1.6;
+      this.coreMesh.visible=core!=='held'&&core!=='anchored';
+      this.anchorMat.color.setHex(core==='anchored'?0xd7f6ff:0x24424a);
+      this.anchorMat.emissive.setHex(core==='anchored'?0xd7f6ff:0x24424a);
+      this.anchorMat.emissiveIntensity=core==='anchored'?1.8:.15;
+      this.coreHalo.visible=core==='held';
+      this.phaseLamps.forEach(l=>{l.material.emissiveIntensity=insidePhase?(phaseBlink?2.4:.15):.45;l.material.color.setHex(0xf7a46b);l.material.emissive.setHex(0xf7a46b);});
+      const checks=[latchOn&&s.isolated&&s.charge>=1, valveOn&&s.cold>=1, !insidePhase, core==='anchored'];
+      this.checkMarks.forEach((m,i)=>{const on=checks[i];const miss=(s.checklistFlash||0)>0&&!on;m.material.color.setHex(on?0x59e4c5:0xf7a46b);m.material.emissive.setHex(on?0x59e4c5:0xf7a46b);m.material.emissiveIntensity=on?1.5:miss?(phaseBlink?2:.2):.35;});
+    }
     const thermal = s.heat ?? FE.baseHeat, cold = s.cold ?? FE.baseCold, over = !!s.overheated, energy = (s.cooling || 'energy') === 'energy';
     const scarHeat = !!memory.scarHeat, scarFrost = !!memory.scarFrost;
     const load = THREE.MathUtils.clamp((thermal - FE.baseHeat) / 2, 0, 1);
@@ -289,8 +342,25 @@ export class World {
     const narrow=this.width/this.height<.85;const cx=narrow?THREE.MathUtils.clamp(s.player.x,-7,7):0,cz=narrow?THREE.MathUtils.clamp(s.player.z,-2,2):0;
     let shake=0;
     if(memory.settings.shake)shake=rewinding?(slice%2?.16:-.11):(s.mode==='launch'||s.scarPulse>0||s.waveFlash>0)?Math.sin(t*64)*.04:0;
+    const departing=s.mode==='fakeEscape'||s.mode==='trueEscape';
+    if(this.sampleGrid){
+      if(!departing)this.sampleGrid.visible=false;
+      else {
+        const shock=Math.max(0,Math.min(1,(s.departT-3)/6));
+        this.sampleGrid.visible=s.departPhase==='hold'||s.departPhase==='shock';
+        if(s.mode==='fakeEscape')this.sampleGrid.position.set(9.2*(1-shock),2+shock,-3*(1-shock));
+        else this.sampleGrid.position.set(0,1.8,0);
+        const hold=Math.min(1,s.departT/3);
+        const far=s.mode==='trueEscape';
+        this.pod.visible=true;
+        this.pod.position.set(9.2+hold*(far?9:3.4), hold*(far?5.5:3.1), -3-hold*(far?4:1.6));
+        this.player.visible=false;
+        this.engine.visible=true;
+      }
+    }
     this.camera.zoom=flying?1-Math.max(0,e-2.5)*.055:1;this.camera.updateProjectionMatrix();
-    this.camera.position.set(cx+shake,28,23+cz);this.camera.lookAt(cx,0,cz);
+    if(departing){this.camera.position.set(6,24,16);this.camera.lookAt(8,2,-2);}
+    else {this.camera.position.set(cx+shake,28,23+cz);this.camera.lookAt(cx,0,cz);}
     this.renderer.render(this.scene,this.camera);
   }
 }

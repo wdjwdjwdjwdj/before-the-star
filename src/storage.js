@@ -17,6 +17,8 @@ export function load() {
     m.scarFrost = d.scarFrost === true;
     m.boardAlert = d.boardAlert === true;
     m.lastTrace = typeof d.lastTrace === 'string' ? d.lastTrace.slice(0, 240) : '';
+    m.fakeEscapes = Number.isFinite(d.fakeEscapes) ? Math.max(0, d.fakeEscapes) : 0;
+    m.clues = [...new Set((d.clues || []).filter(x => x === 'E' || x === 'G' || x === 'C'))];
     const volume = Number(d.settings?.volume ?? .45);
     m.settings.volume = Number.isFinite(volume) ? Math.max(0, Math.min(1, volume)) : .45;
     m.settings.shake = d.settings?.shake !== false; m.settings.flash = d.settings?.flash === true;

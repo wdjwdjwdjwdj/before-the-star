@@ -21,7 +21,8 @@ window.addEventListener('keydown',e=>{
   const k=e.key.toLowerCase();
   if(['tab',' ','arrowup','arrowdown','arrowleft','arrowright','escape'].includes(k))e.preventDefault();
   if(e.repeat)return;
-  if(game.s.mode==='trueend'){if(['e',' ','escape'].includes(k))ui.action('title');return;}
+  if(['fakeEscape','trueEscape','rewind'].includes(game.s.mode))return;
+  if(game.s.mode==='won'||game.s.mode==='trueend'){if(['e',' ','escape'].includes(k))ui.action('title');return;}
   if(k==='escape'){
     if(ui.screen==='pause')ui.close();
     else if(['records','log'].includes(ui.screen))ui.close();
@@ -63,7 +64,7 @@ function advanceClock(now){
 function frame(now){
   const dt=advanceClock(performance.now());
   const target=game.nearest();world.update(game.s,target,game.memory,totalVisual,Math.min(dt,.1));ui.update(target,input.resetHeld);
-  audio.update(game.s.power,!document.hidden&&['play','launch','rewind','trueend'].includes(game.s.mode),game.memory.settings.volume);
+  audio.update(game.s.power,!document.hidden&&['play','launch','rewind','fakeEscape','trueEscape','won'].includes(game.s.mode),game.memory.settings.volume);
   if(totalVisual-lastSave>3){save(game.memory);lastSave=totalVisual;}
   requestAnimationFrame(frame);
 }

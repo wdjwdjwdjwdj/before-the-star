@@ -10,6 +10,12 @@
 #loop-hint{position:absolute;left:50%;bottom:16%;transform:translateX(-50%);z-index:40;pointer-events:none;max-width:34rem;text-align:center;color:#f6e2b8;font-size:20px;letter-spacing:.12em;line-height:1.6;text-shadow:0 2px 18px #000;background:#0c1c28d0;border:1px solid #f3cf9866;padding:14px 22px}
 #rewind-tag{position:absolute;top:18%;left:50%;transform:translateX(-50%);z-index:28;pointer-events:none;letter-spacing:.48em;font-size:13px;color:#f3cf98;text-shadow:0 0 16px #000}
 #hypothesis-now{position:absolute;top:158px;left:28px;margin:0;max-width:28rem;pointer-events:none;color:#f3cf98;font-size:13px;letter-spacing:.04em;text-shadow:0 2px 10px #000}
+#check-row{position:absolute;right:28px;bottom:78px;display:flex;gap:8px;pointer-events:none;z-index:3}
+#check-row i{width:16px;height:16px;border:2px solid #f7a46b;box-shadow:0 0 8px #f7a46b88;background:transparent}
+#check-row i.on{border-color:#59e4c5;background:#59e4c5;box-shadow:0 0 10px #59e4c5}
+#check-row i.miss{animation:checkmiss .28s steps(2) infinite}
+@keyframes checkmiss{50%{opacity:.2;background:#f7a46b}}
+#depart-black{position:absolute;inset:0;background:#000;z-index:36;pointer-events:none}
 #pulse-overlay.rewind-fx{background:repeating-linear-gradient(to bottom,transparent 0 5px,rgba(243,207,152,.22) 5px 6px)}
 #pulse-overlay{pointer-events:none}
 .quiet-end h1{font-size:64px;letter-spacing:.2em}
