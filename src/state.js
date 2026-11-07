@@ -82,17 +82,12 @@ export class Game {
     this.emit('discovery', KNOWLEDGE[id].title);
     this.emit('save');
   }
-  shortcutReady() {
-    const m = this.memory;
-    return m.discoveries.length >= 3 || m.wins >= 1 || m.solvedQuestions.length >= 2;
-  }
   start(fresh = false) {
     if (fresh) this.memory = newMemory(this.memory.settings);
     this.beginCycle();
   }
   beginCycle(opts = {}) {
     const heat = carryResidual(this.memory.residualHeat);
-    const offer = this.shortcutReady();
     this.s = this.initial();
     this.s.heat = heat;
     this.memory.residualHeat = heat;
@@ -100,8 +95,8 @@ export class Game {
       this.memory.activeQuestionId = null;
     }
     if (!this.memory.activeQuestionId) this.memory.activeQuestionId = nextQuestion(this.memory.solvedQuestions);
-    this.s.mode = offer ? 'brief' : 'play';
-    this.s.started = !offer;
+    this.s.mode = 'play';
+    this.s.started = true;
     this.memory.cycles++;
     this.emit('begin', COPY.begin);
     if (heat > FE.baseHeat + 1e-6) {
@@ -117,26 +112,6 @@ export class Game {
       this.s.loopHint = COPY.fakeEscape;
       this.emit('loop-hint', COPY.fakeEscape);
     }
-    if (offer) this.emit('brief');
-    this.emit('save');
-  }
-  chooseReady(half) {
-    if (this.s.mode !== 'brief') return;
-    if (half && this.shortcutReady()) {
-      this.s.charge = .5;
-      this.s.chargePeak = .5;
-    }
-    this.s.isolated = false;
-    this.s.isolating = false;
-    this.s.isolateDelay = 0;
-    this.s.main = true;
-    this.s.power = true;
-    this.s.cooling = 'energy';
-    this.s.thermalSwitchesLeft = SWITCHES_PER_LOOP;
-    this.s.mode = 'play';
-    this.s.started = true;
-    this.mark(half ? '半就绪' : '标准开局');
-    this.emit('ready', !!half);
     this.emit('save');
   }
   trueEscapeReady() { return this.memory.solvedQuestions.length >= TRUE_END_SOLVED; }

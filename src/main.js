@@ -21,7 +21,6 @@ window.addEventListener('keydown',e=>{
   const k=e.key.toLowerCase();
   if(['tab',' ','arrowup','arrowdown','arrowleft','arrowright','escape'].includes(k))e.preventDefault();
   if(e.repeat)return;
-  if(game.s.mode==='brief'){if(k==='1'||k==='n')game.chooseReady(false);if(k==='2'||k==='h')game.chooseReady(true);return;}
   if(game.s.mode==='trueend'){if(['e',' ','escape'].includes(k))ui.action('title');return;}
   if(k==='escape'){
     if(ui.screen==='pause')ui.close();

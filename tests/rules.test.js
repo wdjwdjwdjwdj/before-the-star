@@ -83,12 +83,12 @@ test('there is no manual residual unload; carried heat sheds by one',()=>{
   while(g.s.mode==='rewind')g.tick(.01);
   assert.equal(g.s.heat,carryResidual(4));assert.equal(g.memory.scarHeat,true);assert.equal(g.s.loopHint,'');assert.equal(g.unload,undefined);
 });
-test('half-ready is absent until progress, then offers 50% charge without isolation or a remembered mode',()=>{
-  const {g}=setup();assert.equal(g.s.mode,'play');assert.equal(g.shortcutReady(),false);
-  g.memory.wins=1;g.requestReset();advance(g,1.3);assert.equal(g.s.mode,'brief');assert.equal(g.s.elapsed,0);
-  const frozen=g.s.elapsed;advance(g,3);assert.equal(g.s.elapsed,frozen);
-  g.chooseReady(true);assert.equal(g.s.mode,'play');assert.equal(g.s.charge,.5);assert.equal(g.s.isolated,false);assert.equal(g.s.main,true);assert.equal(g.s.cooling,'energy');assert.equal(g.s.thermalSwitchesLeft,1);
-  at(g,'battery');g.interact();advance(g,2.1);assert.equal(g.s.charge,1);g.interact();assert.equal(g.s.isolated,true);
+test('fold-back after progress goes straight into the next loop with an empty battery',()=>{
+  const {g}=setup();assert.equal(g.s.mode,'play');
+  g.memory.wins=1;g.memory.solvedQuestions=['q_gate','q_cold'];g.requestReset();
+  while(g.s.mode==='rewind')g.tick(.01);
+  assert.equal(g.s.mode,'play');assert.equal(g.s.charge,0);assert.equal(g.s.isolated,false);assert.equal(g.s.main,true);assert.equal(g.s.cooling,'energy');
+  assert.deepEqual(g.s.player,SPAWN);
 });
 test('one hypothesis is open per loop, solving it waits until the next loop to hang the next',()=>{
   const {g}=setup();assert.equal(g.memory.activeQuestionId,'q_gate');
