@@ -2,32 +2,25 @@
 
 Panda Game Jam 科幻循环解谜。主题是 **「环 / Cycle」**。
 
-## 马上玩 · Play now
+## 马上玩 · Play this build
 
-不需要 OhMyGame，也不需要先编译。这是设计锁定前的 **V2 静态构建**（温控 / 储冷 / 余热已在里面）。
-
-浏览器（GitHub Pages，分支推进后即可开）：
-
-`https://wdjwdjwdjwdj.github.io/before-the-star/`
-
-本地直接起静态服务（在仓库根目录）：
+要玩的是 **方案丙 + ①假设 + ②热痕**，不是 V2 对照包。标题上能看见 `丙+①② / NOT V2`。
 
 ```sh
-python3 -m http.server 5174 -d reference/v2-dist
+python3 -m http.server 8765 -d playable
 ```
 
-然后打开 `http://127.0.0.1:5174/`。`docs/` 里是同一份 V2，给 GitHub Pages 用。相对路径，不要用 `file://` 打开。
+打开 `http://127.0.0.1:8765/`。`docs/` 是同一份新构建，给 GitHub Pages。`reference/v2-dist/` 才是原来的 V2，不要再把服务器指到那里。不要用 `file://`。
 
-当前源码（V2 规则补回仓库，并叠了方案丙 + 假设环 + 热痕）另起开发服务器：
+源码：
 
 ```sh
-npm i
-npm run dev
+npm i && npm run dev
+npm test
+npm run build
 ```
 
-打开 Vite 打印的本地地址。`npm test` 跑规则，`npm run build` 后可用 `python3 -m http.server 5175 -d dist` 看源码构建。根目录 `dist/` 不入库。
-
-This is the playable V2 static build (thermal / cold storage / residual heat). Serve `reference/v2-dist` or open the Pages URL. Do not open `index.html` via `file://`. The Vite app at the repo root is the newer source slice.
+The new static game is `playable/`. `reference/v2-dist/` is the old V2 comparison and will feel unchanged.
 
 A short sci-fi loop puzzle for the Panda Game Jam. The theme is **Cycle**.
 
