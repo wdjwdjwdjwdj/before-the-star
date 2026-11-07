@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "nodes": [
+    {"id":"design","type":"document","title":"恒星升起前 · 主设计文档","data":{"documentId":"main-design"}},
+    {"id":"level-source","type":"file","title":"生产资产 · 空间站与宇航员（程序模型）","description":"实际游戏使用的 Three.js 几何、灯光、恒星 shader 与发射动画。","data":{"path":"src/render.js"}},
+    {"id":"rules-source","type":"file","title":"核心机关与循环状态机","data":{"path":"src/state.js"}},
+    {"id":"audio-source","type":"file","title":"生产声音 · Web Audio 程序音效","data":{"path":"src/audio.js"}},
+    {"id":"qa","type":"file","title":"规则测试与真实试玩报告","description":"包含单环约14.45秒真实键盘通关、未隔离失败、暂停存档、窄屏与舷窗截图检查的证据和未验证边界。","data":{"path":"QA.md"}},
+    {"id":"ui-source","type":"file","title":"最终界面 · 标题、HUD、认知与舷窗结局","description":"已在实际游戏中集成与截图检查的程序化界面，不是未实现的示意图。","data":{"path":"src/ui.js"}},
+    {"id":"readme","type":"file","title":"继续开发 · 启动与参数说明","data":{"path":"README.md"}}
+  ],
+  "edges": [],
+  "id": "b7a6d231-b564-4ed1-a351-d583ee3b9e0b"
+}
